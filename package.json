@@ -27,7 +27,8 @@
   "keywords": [
     "Ethereum",
     "Solidity",
-    "Payroll"
+    "Payroll",
+    "Oracle"
   ],
   "author": "Luis Philipe Fidelis",
   "license": "Apache-2.0",
