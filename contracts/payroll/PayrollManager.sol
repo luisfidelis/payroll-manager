@@ -19,6 +19,7 @@ contract PayrollManager is Ownable {
      */
     mapping(uint => Employee) private employees;
     mapping(address => uint) private accounts;
+    mapping(address => uint256) private rates;
     uint public totalEmployees;
 
     /**
@@ -28,6 +29,7 @@ contract PayrollManager is Ownable {
         address account;
         uint256 yearlyEURSalary;
         address[] allowedTokens;
+        uint256 timelock;
         bool active;
     }
     
@@ -77,7 +79,7 @@ contract PayrollManager is Ownable {
         external
     {   
         require(!isEmployee(account), "The account is already an employee");
-        Employee employee = Employee(account, initialYearlyEURSalary, allowedTokens, true);
+        Employee employee = Employee(account, initialYearlyEURSalary, allowedTokens, now + 30 days, true);
         totalEmployees = totalEmployees.sum(1);
         employees[totalEmployees] = employee;
         accounts[account] = totalEmployees;
@@ -147,7 +149,7 @@ contract PayrollManager is Ownable {
 
     /**
      * @dev Calculates Monthly EUR amount spent in salaries
-     * @param employeeId  Employee identifier/index 
+     * @return Amount spent 
      */ 
     function calculatePayrollBurnrate() 
         onlyOwner
@@ -156,12 +158,25 @@ contract PayrollManager is Ownable {
     {
         for(uint index = 1; index <= totalEmployees; index++){
             if(employees[index].active){
-                burnRate = burnRate.sum(employees[index].yearlyEURSalary.div(12));
+                burnRate = burnRate.sum(employees[index].yearlyEURSalary);
             }
+        }
+        if(burnRate > 0){
+            burnRate = burnRate.div(12);
         }
     }
     
-    
+    /**
+     * @dev Calculates days until the contract can run out of funds
+     * @return Days count
+     */ 
+    function calculatePayrollRunway() 
+        onlyOwner
+        view 
+        returns (uint256 runWay)
+    {
+
+    }
 
     /**
      * @dev Checks if an address matches an active employee
