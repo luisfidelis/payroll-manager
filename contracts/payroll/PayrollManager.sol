@@ -17,54 +17,128 @@ contract PayrollManager is Ownable {
     /**
      * Storage
      */
-    mapping(address => uint256) private employeesId;
+    mapping(uint => Employee) private employees;
+    mapping(address => uint) private accounts;
+    uint public totalEmployees;
 
-    uint256 public totalEmployees;
-
-    address public token;
-
+    /**
+     * Types   
+     */
     Struct Employee {
-        uint256 employeeId;
+        address account;
         uint256 yearlyEURSalary;
-
+        address[] allowedTokens;
+        bool active;
     }
     
     /**
      * Events   
      */
-    event LogEmployeeAdded(address accountAddress, uint256 initialYearlyEURSalary);
-    event LogEmployeeSalaryChanged(uint256 employeeId, uint256 yearlyEURSalary);
-    event LogEmployeeRemoved(uint256 employeeId);
-    event LogFundsAdded(uint256 amount);
-    event LogSalaryAllocationChanged(uint256 employeeId, address[] tokens, uint256[] distribution);
+    event LogEmployeeAdded(address accountAddress, uint employeeId, uint256 initialYearlyEURSalary);
+    event LogEmployeeSalaryChanged(uint indexed employeeId, uint256 yearlyEURSalary);
+    event LogEmployeeRemoved(uint employeeId);
+    event LogFundsAdded(uint amount);
+    event LogSalaryAllocationChanged(uint indexed employeeId, address[] tokens, uint256[] distribution);
     
     /**
      * Modifiers   
      */
     modifier onlyEmployee(){
-        require(, "The user isn't an employee");
+        require(isEmployee(msg.sender), "The user isn't an employee");
         _;
     }
 
-    // /* OWNER ONLY */
-    // function addEmployee(address accountAddress, address[] allowedTokens, uint256 initialYearlyEURSalary);
-    // function setEmployeeSalary(uint256 employeeId, uint256 yearlyEURSalary);
-    // function removeEmployee(uint256 employeeId);
- 
-    // function addFunds() payable;
-    // function scapeHatch();
-    // // function addTokenFunds()? // Use approveAndCall or ERC223 tokenFallback
- 
-    // function getEmployeeCount() constant returns (uint256);
-    // function getEmployee(uint256 employeeId) constant returns (address employee); // Return all important info too
- 
-    // function calculatePayrollBurnrate() constant returns (uint256); // Monthly EUR amount spent in salaries
-    // function calculatePayrollRunway() constant returns (uint256); // Days until the contract can run out of funds
- 
-    // /* EMPLOYEE ONLY */
-    // function determineAllocation(address[] tokens, uint256[] distribution); // only callable once every 6 months
-    // function payday(); // only callable once a month
- 
-    // /* ORACLE ONLY */
-    // function setExchangeRate(address token, uint256 EURExchangeRate); // uses decimals from token
+    modifier onlyActiveEmployee(uint employeeId){
+        require(totalEmployees >= employeeId && employeeId > uint(0), "The employee doesn't exists");
+        require(employees[employeeId].active, "The employee is inactive");
+        _;
+    } 
+
+    /**
+     * @dev Add an employee
+     * @param account                   Account used for payment
+     * @param allowedTokens             Tokens allowed for allocating the salary
+     * @param initialYearlyEURSalary    Yearly EUR salary
+     */ 
+    function addEmployee(address account, address[] allowedTokens, uint256 initialYearlyEURSalary)
+        onlyOwner
+        external
+    {   
+        require(!isEmployee(account), "The account is already an employee");
+        Employee employee = Employee(account, initialYearlyEURSalary, allowedTokens, true);
+        totalEmployees = totalEmployees.sum(1);
+        employees[totalEmployees] = employee;
+        accounts[account] = totalEmployees;
+        emit LogEmployeeAdded(account, totalEmployees, initialYearlyEURSalary);
+    }
+
+    /**
+     * @dev Update employee's yearly EUR Salary
+     * @param employeeId        Employee identifier/index
+     * @param yearlyEURSalary   Yearly EUR salary
+     */ 
+    function setEmployeeSalary(uint employeeId, uint256 yearlyEURSalary)
+        onlyOwner
+        onlyActiveEmployee(employeeId)
+        external
+    {
+        employees[employeeId].yearlyEURSalary = yearlyEURSalary;
+        emit LogEmployeeSalaryChanged(employeeId, yearlyEURSalary);
+    }
+
+    /**
+     * @dev Remove an active employee
+     * @param employeeId  Employee identifier/index 
+     */ 
+    function removeEmployee(uint employeeId)
+        onlyOwner
+        onlyActiveEmployee(employeeId)
+        external
+    {   
+        address account = employees[employeeId].account;
+        delete accounts[account];
+        delete employees[employeeId];
+        emit LogEmployeeRemoved(accountAddress, totalEmployees, initialYearlyEURSalary);
+    }
+
+    /**
+     * @dev Retrieves the number of active employees
+     * @return Number of active employees
+     */ 
+    function getEmployeeCount() 
+        view
+        public  
+        returns (uint activeOwners)
+    {   
+        for(uint index = 1; index <= totalEmployees; index++){
+            if(employees[index].active){
+                activeOwners++;
+            }
+        }
+    }
+
+    /**
+     * @dev Retrieves employee's infos
+     * @param employeeId  Employee identifier/index 
+     */ 
+    function getEmployee(uint256 employeeId) 
+        onlyActiveEmployee(employeeId)
+        view 
+        returns (address, uint256, address[])
+    {
+        Employee employee = employees[employeeId]
+        return (employee.account, employee.yearlyEURSalary, employee.allowedTokens);
+    } 
+
+    /**
+     * @dev Checks if an address matches an active employee
+     * @param employeeId  Employee identifier/index 
+     */ 
+    function isEmployee(address employeeAccount) 
+        view 
+        internal
+        returns(bool) 
+    {
+        return employees[accounts[employeeAccount]].active;
+    }
 }
