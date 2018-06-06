@@ -2,6 +2,7 @@ pragma solidity ^0.4.24;
 
 import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "openzeppelin-solidity/contracts/ERC20/StandardToken.sol";
 
 /**
  * @title Payroll Manager 
@@ -21,6 +22,7 @@ contract PayrollManager is Ownable {
     mapping(address => uint) private accounts;
     mapping(address => uint256) private rates;
     uint public totalEmployees;
+    address public eurToken;
 
     /**
      * Types   
@@ -45,6 +47,7 @@ contract PayrollManager is Ownable {
     event LogFundsAdded(uint amount);
     event LogSalaryAllocationChanged(uint indexed employeeId, address[] tokens, uint256[] distribution);
     event LogAccountChanged(uint indexed employeeId, address account);
+    event LogSalaryWithdrawal(uint indexed employeeId, uint256 timestamp);
     
     /**
      * Modifiers   
@@ -59,6 +62,13 @@ contract PayrollManager is Ownable {
         require(employees[employeeId].active, "The employee is inactive");
         _;
     } 
+
+    /**
+     * @param _eurToken Address of EUR Token
+     */  
+    constructor(address _eurToken) {
+        eurToken = _eurToken;
+    }
 
     /**
      * @dev Supply funds to the contract
@@ -84,8 +94,8 @@ contract PayrollManager is Ownable {
     {   
         require(account != address(0), "The account is an invalid address");
         require(!isEmployee(account), "The account is already an employee");
-        Employee employee = Employee(account, initialYearlyEURSalary, allowedTokens, now + 30 days,,,true);
-        totalEmployees = totalEmployees.sum(1);
+        Employee employee = Employee(account, initialYearlyEURSalary, allowedTokens, now.add(30 days),,,true);
+        totalEmployees = totalEmployees.add(1);
         employees[totalEmployees] = employee;
         accounts[account] = totalEmployees;
         emit LogEmployeeAdded(account, totalEmployees, initialYearlyEURSalary);
@@ -163,7 +173,7 @@ contract PayrollManager is Ownable {
     {
         for(uint index = 1; index <= totalEmployees; index++){
             if(employees[index].active){
-                burnRate = burnRate.sum(employees[index].yearlyEURSalary);
+                burnRate = burnRate.add(employees[index].yearlyEURSalary);
             }
         }
         if(burnRate > 0){
@@ -198,12 +208,12 @@ contract PayrollManager is Ownable {
         uint256 totalDistribution;
         for(uint index = 0; index < tokens.length; index++){
             require(isAllowed(tokens[index], employee.allowedTokens), "A token is not allowed");
-            totalDistribution.sum(distribution[index]);
+            totalDistribution.add(distribution[index]);
         }
         require(totalDistribution <= 10000, "The distribution exceeds 100%");
         employee.tokens = tokens;
         employee.distribution = distribution;
-        employee.allocationTimelock = now.sum((1 year).div(2));
+        employee.allocationTimelock = now.add((1 year).div(2));
         emit LogSalaryAllocationChanged(accounts[msg.sender], tokens, distribution);
     }
 
@@ -216,17 +226,22 @@ contract PayrollManager is Ownable {
     {
         Employee employee = employees[accounts[msg.sender]];
         require(now.sub(employee.paydayTimelock) >= 0, "The employee is time locked for withdrawal");
+        employee.paydayTimelock = now.add(30 days);
         uint256 monthlySalary = employee.yearlyEURSalary.div(12); 
-        uint256 distributed = 0;
+        uint256 distributed;
         for(uint index = 0; index < employee.tokens; index++){
             if(employee.distribution[index] != 0){
-                require(rates[employee.tokens[index]] != 0, "Missing token rate");
-                
+                address token = employee.tokens[index];
+                require(rates[token] != 0, "Missing token rate");
+                uint256 distribution = employee.distribution[index];
+                StandardToken(token).transfer(msg.sender, rates[token].mul(monthlySalary.mul(distribution).div(10000)));
+                distributed.add(employee.distribution[index]);
             }
         }
-        require(totalDistribution <= 10000, "The distribution exceeds 100%");
-        employee.paydayTimelock = now.sum(30 days);
-        emit LogSalaryAllocationChanged(accounts[msg.sender], tokens, distribution);
+        if(distributed < 10000){
+            StandardToken(eurToken).transfer(monthlySalary.mul((10000.sub(distributed)).div(10000));
+        }
+        emit LogSalaryWithdrawal(accounts[msg.sender], now);
     }
 
     /**
