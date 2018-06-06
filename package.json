@@ -7,8 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "scripts/test.sh",
-    "test.win": "sh scripts/test.sh",
+    "test": "sh scripts/test.sh",
     "ganache": "sh scripts/start_testrpc.sh",
     "compile": "truffle compile",
     "migrate.dev": "truffle migrate --network dev",
