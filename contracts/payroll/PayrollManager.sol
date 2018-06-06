@@ -98,7 +98,7 @@ contract PayrollManager is Ownable {
         address account = employees[employeeId].account;
         delete accounts[account];
         delete employees[employeeId];
-        emit LogEmployeeRemoved(accountAddress, totalEmployees, initialYearlyEURSalary);
+        emit LogEmployeeRemoved(employeeId);
     }
 
     /**
