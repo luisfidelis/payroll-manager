@@ -7,7 +7,12 @@
     "test": "test"
   },
   "scripts": {
-    "test": "truffle test"
+    "test": "scripts/test.sh",
+    "test.win": "sh scripts/test.sh",
+    "ganache": "sh scripts/start_testrpc.sh",
+    "compile": "truffle compile",
+    "migrate.dev": "truffle migrate --network dev",
+    "migrate.dev.hard": "truffle migrate --network dev --reset"
   },
   "dependencies": {
     "openzeppelin-solidity": "1.9.0"

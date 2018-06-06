@@ -23,6 +23,7 @@ contract PayrollManager is Ownable {
     mapping(address => uint256) private rates;
     uint public totalEmployees;
     address public eurToken;
+    address public oracle;
 
     /**
      * Types   
@@ -66,8 +67,9 @@ contract PayrollManager is Ownable {
     /**
      * @param _eurToken Address of EUR Token
      */  
-    constructor(address _eurToken) {
+    constructor(address _eurToken, address _oracle) {
         eurToken = _eurToken;
+        oracle = _oracle;
     }
 
     /**
@@ -258,6 +260,19 @@ contract PayrollManager is Ownable {
         employee.account = account;
         accounts[account] = accounts[msg.sender];
         delete accounts[msg.sender];
+        emit LogAccountChanged(accounts[account], account);
+    }
+
+    /**
+     * @dev Updates token/EUR exchange rate
+     * @param token           Token address
+     * @param EURExchangeRate EUR exchange rate
+     */ 
+    function setExchangeRate(address token, uint256 EURExchangeRate)
+        external
+    {
+        require(msg.sender == oracle, "The wallet isn't the oracle");
+        rates[token] = EURExchangeRate;
         emit LogAccountChanged(accounts[account], account);
     }
 
