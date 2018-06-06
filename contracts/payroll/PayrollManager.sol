@@ -29,7 +29,10 @@ contract PayrollManager is Ownable {
         address account;
         uint256 yearlyEURSalary;
         address[] allowedTokens;
-        uint256 timelock;
+        address[] tokens;
+        uint256[] distribution;
+        uint256 payoutTimelock;
+        uint256 allocationTimelock;
         bool active;
     }
     
@@ -79,7 +82,7 @@ contract PayrollManager is Ownable {
         external
     {   
         require(!isEmployee(account), "The account is already an employee");
-        Employee employee = Employee(account, initialYearlyEURSalary, allowedTokens, now + 30 days, true);
+        Employee employee = Employee(account, initialYearlyEURSalary, allowedTokens, now + 30 days,,,true);
         totalEmployees = totalEmployees.sum(1);
         employees[totalEmployees] = employee;
         accounts[account] = totalEmployees;
@@ -179,6 +182,28 @@ contract PayrollManager is Ownable {
     }
 
     /**
+     * @dev Allocates salary in tokens
+     * @param tokens          Token addresses
+     * @param distribution    Distribution values. Value format: (0%) 0 ~ 10000 (100%)
+     */ 
+    function determineAllocation(address[] tokens, uint256[] distribution)
+        onlyEmployee
+        external
+    {
+        Employee employee = employees[accounts[msg.sender]];
+        require(now.sub(employee.allocationTimelock) >= (30 days).mul(6), "The employee is time locked for allocations"); 
+        require(tokens.length == distribution.length, "Token list length doesn't distribution length");
+        uint256 totalDistribution;
+        for(uint index = 0; index < tokens.length; index++){
+            require(isAllowed(tokens[index], employee.allowedTokens), "An token is not allowed");
+            totalDistribution.sum(distribution[index]);
+        }
+        require(totalDistribution <= 10000);
+        employee.tokens = tokens;
+        employee.distribution = distribution;
+    }
+
+    /**
      * @dev Checks if an address matches an active employee
      * @param employeeId  Employee identifier/index 
      */ 
@@ -189,4 +214,25 @@ contract PayrollManager is Ownable {
     {
         return employees[accounts[employeeAccount]].active;
     }
+
+    
+    /**
+     * @dev Checks if an token is allowed
+     * @param token         Token address
+     * @param allowedTokens Allowed tokens
+     * @return allowance
+     */ 
+    function isAllowed(address token, address[] allowedTokens) 
+        pure 
+        internal
+        returns(bool) 
+    {
+        for(uint index = 0; index < allowedTokens; index++) {
+            if(allowedTokens[index] == token){
+                return true;
+            }
+        }
+        return false;
+    }
+
 }
