@@ -31,7 +31,7 @@ contract PayrollManager is Ownable {
         address[] allowedTokens;
         address[] tokens;
         uint256[] distribution;
-        uint256 payoutTimelock;
+        uint256 paydayTimelock;
         uint256 allocationTimelock;
         bool active;
     }
@@ -44,6 +44,7 @@ contract PayrollManager is Ownable {
     event LogEmployeeRemoved(uint employeeId);
     event LogFundsAdded(uint amount);
     event LogSalaryAllocationChanged(uint indexed employeeId, address[] tokens, uint256[] distribution);
+    event LogAccountChanged(uint indexed employeeId, address account);
     
     /**
      * Modifiers   
@@ -81,6 +82,7 @@ contract PayrollManager is Ownable {
         onlyOwner
         external
     {   
+        require(account != address(0), "The account is an invalid address");
         require(!isEmployee(account), "The account is already an employee");
         Employee employee = Employee(account, initialYearlyEURSalary, allowedTokens, now + 30 days,,,true);
         totalEmployees = totalEmployees.sum(1);
@@ -173,35 +175,75 @@ contract PayrollManager is Ownable {
      * @dev Calculates days until the contract can run out of funds
      * @return Days count
      */ 
-    function calculatePayrollRunway() 
-        onlyOwner
-        view 
-        returns (uint256 runWay)
-    {
+    // function calculatePayrollRunway() 
+    //     onlyOwner
+    //     view 
+    //     returns (uint256 runWay)
+    // {
 
-    }
+    // }
 
     /**
      * @dev Allocates salary in tokens
      * @param tokens          Token addresses
-     * @param distribution    Distribution values. Value format: (0%) 0 ~ 10000 (100%)
+     * @param distribution    Distribution values. Value range: (0%) 0 ~ 10000 (100%)
      */ 
     function determineAllocation(address[] tokens, uint256[] distribution)
         onlyEmployee
         external
     {
         Employee employee = employees[accounts[msg.sender]];
-        require(now.sub(employee.allocationTimelock) >= (30 days).mul(6), "The employee is time locked for allocations"); 
-        require(tokens.length == distribution.length, "Token list length doesn't distribution length");
+        require(now.sub(employee.allocationTimelock) >= 0, "The employee is time locked for allocations"); 
+        require(tokens.length == distribution.length, "Token list length doesn't matches distribution length");
         uint256 totalDistribution;
         for(uint index = 0; index < tokens.length; index++){
-            require(isAllowed(tokens[index], employee.allowedTokens), "An token is not allowed");
+            require(isAllowed(tokens[index], employee.allowedTokens), "A token is not allowed");
             totalDistribution.sum(distribution[index]);
         }
         require(totalDistribution <= 10000, "The distribution exceeds 100%");
         employee.tokens = tokens;
         employee.distribution = distribution;
+        employee.allocationTimelock = now.sum((1 year).div(2));
         emit LogSalaryAllocationChanged(accounts[msg.sender], tokens, distribution);
+    }
+
+    /**
+     * @dev Withdraws employee salary
+     */ 
+    function payday()
+        onlyEmployee
+        external
+    {
+        Employee employee = employees[accounts[msg.sender]];
+        require(now.sub(employee.paydayTimelock) >= 0, "The employee is time locked for withdrawal");
+        uint256 monthlySalary = employee.yearlyEURSalary.div(12); 
+        uint256 distributed = 0;
+        for(uint index = 0; index < employee.tokens; index++){
+            if(employee.distribution[index] != 0){
+                require(rates[employee.tokens[index]] != 0, "Missing token rate");
+                
+            }
+        }
+        require(totalDistribution <= 10000, "The distribution exceeds 100%");
+        employee.paydayTimelock = now.sum(30 days);
+        emit LogSalaryAllocationChanged(accounts[msg.sender], tokens, distribution);
+    }
+
+    /**
+     * @dev Updates employee account
+     * @param account New account address
+     */ 
+    function changeAccount(address account)
+        onlyEmployee
+        external
+    {
+        require(account != address(0), "The account is an invalid address");
+        require(!isEmployee(account), "The account is already an employee");
+        Employee employee = employees[accounts[msg.sender]];
+        employee.account = account;
+        accounts[account] = accounts[msg.sender];
+        delete accounts[msg.sender];
+        emit LogAccountChanged(accounts[account], account);
     }
 
     /**
