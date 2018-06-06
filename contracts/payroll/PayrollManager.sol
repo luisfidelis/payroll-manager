@@ -198,9 +198,10 @@ contract PayrollManager is Ownable {
             require(isAllowed(tokens[index], employee.allowedTokens), "An token is not allowed");
             totalDistribution.sum(distribution[index]);
         }
-        require(totalDistribution <= 10000);
+        require(totalDistribution <= 10000, "The distribution exceeds 100%");
         employee.tokens = tokens;
         employee.distribution = distribution;
+        emit LogSalaryAllocationChanged(accounts[msg.sender], tokens, distribution);
     }
 
     /**
