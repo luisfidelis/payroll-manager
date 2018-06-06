@@ -55,6 +55,18 @@ contract PayrollManager is Ownable {
     } 
 
     /**
+     * @dev Supply funds to the contract
+     */ 
+    function addFunds()
+        onlyOwner
+        payable
+        external
+    {   
+        emit LogFundsAdded(msg.value);
+    }
+
+    
+    /**
      * @dev Add an employee
      * @param account                   Account used for payment
      * @param allowedTokens             Tokens allowed for allocating the salary
@@ -106,6 +118,7 @@ contract PayrollManager is Ownable {
      * @return Number of active employees
      */ 
     function getEmployeeCount() 
+        onlyOwner
         view
         public  
         returns (uint activeOwners)
@@ -122,13 +135,33 @@ contract PayrollManager is Ownable {
      * @param employeeId  Employee identifier/index 
      */ 
     function getEmployee(uint256 employeeId) 
+        onlyOwner
         onlyActiveEmployee(employeeId)
         view 
+        public
         returns (address, uint256, address[])
     {
-        Employee employee = employees[employeeId]
+        Employee employee = employees[employeeId];
         return (employee.account, employee.yearlyEURSalary, employee.allowedTokens);
     } 
+
+    /**
+     * @dev Calculates Monthly EUR amount spent in salaries
+     * @param employeeId  Employee identifier/index 
+     */ 
+    function calculatePayrollBurnrate() 
+        onlyOwner
+        view 
+        returns (uint256 burnRate) 
+    {
+        for(uint index = 1; index <= totalEmployees; index++){
+            if(employees[index].active){
+                burnRate = burnRate.sum(employees[index].yearlyEURSalary.div(12));
+            }
+        }
+    }
+    
+    
 
     /**
      * @dev Checks if an address matches an active employee
