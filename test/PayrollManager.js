@@ -22,7 +22,7 @@ let employee_2 = { yearlyEURSalary : eur(240000) }
 let employee_3 = { yearlyEURSalary : eur(320000) }
 
 // useful variables
-let activeEmployees = 0
+let employeesAdded = 0
 
 contract("PayrollManager", async accounts => {
 
@@ -73,7 +73,7 @@ contract("PayrollManager", async accounts => {
             assert.equal(args.employeeId.toNumber(), 1, "The employee must be the first employee" )
             assert.equal(args.initialYearlyEURSalary.toNumber(), employee_1.yearlyEURSalary.toNumber(), "The yearly salary must be the expected")
             employee_1.id = args.employeeId
-            activeEmployees++
+            employeesAdded++
         })
 
         it("should deny add an employee with an existing account", async () => {
@@ -83,6 +83,35 @@ contract("PayrollManager", async accounts => {
                 employee_1.yearlyEURSalary,
                 { from: owner }
             ).should.be.rejectedWith("VM Exception")
+        })
+
+    })
+
+    context('Retrieve employee', () => {
+        
+        it("should only allow retrieve employee by the owner", async () => {
+            await payroll.getEmployee(
+                employee_1.id,
+                { from: employee_2.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should deny retrieve an invalid employee", async () => {
+            await payroll.getEmployee(
+                employeesAdded+1,
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should retrieve the employee", async () => {
+            const employee = await payroll.getEmployee(
+                employee_1.id,
+                { from: owner }
+            )
+            expect(employee).to.have.length(7);
+            assert.equal(employee[0], employee_1.account, "The retrieved employee must be the first employee") // account
+            assert.equal(employee[1].toNumber(), employee_1.yearlyEURSalary.toNumber(), "The retrieved employee must be correct")
+            assert.equal(employee[4].toNumber(), 0, "The employee shouldn't have allocation time lock" )
         })
 
     })
@@ -99,7 +128,7 @@ contract("PayrollManager", async accounts => {
 
         it("should deny update an invalid employee", async () => {
             await payroll.setEmployeeSalary(
-                activeEmployees+1,
+                employeesAdded+1,
                 employee_1.yearlyEURSalary.times(2),
                 { from: owner }
             ).should.be.rejectedWith("VM Exception")
@@ -132,7 +161,7 @@ contract("PayrollManager", async accounts => {
             )
             const event = logs.find(e => e.event === "LogEmployeeAdded")
             employee_2.id = event.args.employeeId
-            activeEmployees++;
+            employeesAdded++;
         })
 
         it("should only allow remove employee by the owner", async () => {
@@ -144,7 +173,7 @@ contract("PayrollManager", async accounts => {
 
         it("should deny remove an invalid employee", async () => {
             await payroll.removeEmployee(
-                activeEmployees+1,
+                employeesAdded+1,
                 { from: owner }
             ).should.be.rejectedWith("VM Exception")
         })
@@ -162,6 +191,8 @@ contract("PayrollManager", async accounts => {
         })
 
     })
+
+
 
 
 })

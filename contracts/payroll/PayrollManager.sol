@@ -154,6 +154,7 @@ contract PayrollManager is Ownable {
         public  
         returns (uint activeOwners)
     {   
+
         for(uint index = 1; index <= totalEmployees; index++){
             if(employees[index].active){
                 activeOwners++;
@@ -170,10 +171,10 @@ contract PayrollManager is Ownable {
         onlyActiveEmployee(employeeId)
         view 
         public
-        returns (address, uint256, address[])
+        returns (address account, uint256 yearlyEURSalary, address[] allowedTokens, uint256 paydayTimelock, uint256 allocationTimelock, address[] tokens, uint256[] distribution)
     {
         Employee memory employee = employees[employeeId];
-        return (employee.account, employee.yearlyEURSalary, employee.allowedTokens);
+        return (employee.account, employee.yearlyEURSalary, employee.allowedTokens, employee.paydayTimelock, employee.allocationTimelock, employee.tokens, employee.distribution);
     } 
 
     /**
@@ -289,6 +290,18 @@ contract PayrollManager is Ownable {
         require(msg.sender == oracle, "The wallet isn't the oracle");
         rates[token] = EURExchangeRate;
     }
+
+    /**
+     * @dev Retrieves token's rate
+     * @param token  Token address 
+     */ 
+    function getTokenRate(address token) 
+        view 
+        public
+        returns (uint256 rate)
+    {
+        rate = rates[token];
+    } 
 
     /**
      * @dev Checks if an address matches an active employee
