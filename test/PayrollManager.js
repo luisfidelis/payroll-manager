@@ -8,6 +8,7 @@ const expect = require("chai").expect
 // helpers
 const eur = require("./helpers/ether")
 const increaseTime = require("./helpers/increaseTime")
+const { getBalance, getGasPrice } = require('./helpers/web3')
 
 // --- Handled contracts
 const PayrollManager = artifacts.require("./payroll/PayrollManager.sol")
@@ -26,6 +27,7 @@ let employee_3 = { yearlyEURSalary : eur(360000) }
 
 // useful variables
 let employeesAdded = 0
+let gasPrice = null
 
 let token_1 = { rate: new BigNumber(1000000000000000000) }
 let tokenInstance_1 = null
@@ -37,6 +39,9 @@ let tokenInstance_3 = null
 contract("PayrollManager", async accounts => {
 
     before( async () => {
+        
+        gasPrice = await getGasPrice()
+        gasPrice = new BigNumber(gasPrice)
 
         owner = accounts[0]
         employee_1.account = accounts[1]
@@ -252,7 +257,7 @@ contract("PayrollManager", async accounts => {
 
     })
 
-    context('Retrieve number of active owners', () => {
+    context('Retrieve number of active employees', () => {
         
         it("should only allow retrieve employees count by the owner", async () => {
             await payroll.getEmployeeCount({
@@ -263,6 +268,47 @@ contract("PayrollManager", async accounts => {
         it("should retrieve the number of active employees", async () => {
             const count = await payroll.getEmployeeCount({ from: owner })
             assert.equal(count.toNumber(), 3, "The number of active employees must be correct") 
+        })
+
+    })
+
+    context('Supply funds(ETHER)', () => {
+        
+        it("should only allow supply funds by the owner", async () => {
+            await payroll.addFunds({
+                from: employee_1.account,
+                value: eur(1) 
+            }).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should add funds", async () => {
+            
+            const previousOwnerBalance = await getBalance(owner)
+            const previousPayrollBalance = await getBalance(payroll.address)
+
+            const {logs, receipt} = await payroll.addFunds({ from: owner, value: eur(1) })
+            const event = logs.find(e => e.event === "LogFundsAdded")
+            const args = event.args
+            expect(args).to.include.all.keys([ "amount" ])
+            assert.equal(args.amount.toNumber(), eur(1).toNumber(), "Funds must be supplied correctly")
+
+            const currentOwnerBalance = await getBalance(owner)
+            const currentPayrollBalance = await getBalance(payroll.address)
+            const gasUsed = new BigNumber(receipt.gasUsed)
+
+            currentOwnerBalance.toNumber().should.equal(
+                previousOwnerBalance
+                .minus(eur(1))
+                .minus(gasPrice.times(gasUsed))
+                .toNumber()
+            )
+
+            currentPayrollBalance.toNumber().should.equal(
+                previousPayrollBalance
+                .plus(eur(1))
+                .toNumber()
+            )
+
         })
 
     })
