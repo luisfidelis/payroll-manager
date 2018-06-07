@@ -17,15 +17,16 @@ Allows owners to manage employees and their salaries. Allows employees to withdr
 ## Contracts
 
 ### [PayrollManager.sol](https://github.com/luisfidelis/payroll-manager/tree/master/contracts/payroll)
-    * Owners can:
-    ** Add or remove employees;
-    ** Manage employees salaries;
-    ** Check payroll burnrate;
-    
-    * Employees can:
-    ** Allocate their salaries in allowed ERC20 tokens;
-    ** Update account addresses;
-    ** Withdraw salaries monthly;
+
+Owners can:
+* Add or remove employees;
+* Manage employees salaries;
+* Check payroll burnrate;
+  
+Employees can:
+* Allocate their salaries in allowed ERC20 tokens;
+* Update account addresses;
+* Withdraw salaries monthly;
 
 ## Setup
 
