@@ -3,6 +3,7 @@ pragma solidity ^0.4.24;
 import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 import "openzeppelin-solidity/contracts/token/ERC20/StandardToken.sol";
+import "../token/Token.sol";
 
 /**
  * @title Payroll Manager 
@@ -267,14 +268,14 @@ contract PayrollManager is Ownable {
                 address token = employee.tokens[index];
                 require(rates[token] != 0, "Missing token rate");
                 uint256 distribution = employee.distribution[index];
-                StandardToken _token = StandardToken(token);
-                require(_token.transfer(msg.sender, rates[token].mul(monthlySalary.mul(distribution).div(10000))));
-                distributed.add(employee.distribution[index]);
+                Token _token = Token(token);
+                require(_token.transfer(msg.sender, calculateTokenAmount(distribution, monthlySalary, _token.decimals(), rates[token])));
+                distributed = distributed.add(employee.distribution[index]);
             }
         }
         if(distributed < 10000){
             StandardToken _eur = StandardToken(eurToken);
-            require(_eur.transfer(msg.sender, monthlySalary.mul((uint256(10000).sub(distributed)).div(10000))));
+            require(_eur.transfer(msg.sender, (monthlySalary.mul(uint256(10000).sub(distributed)).div(10000))));
         }
         emit LogSalaryWithdrawal(accounts[msg.sender], now);
     }
@@ -315,6 +316,22 @@ contract PayrollManager is Ownable {
         return employees[accounts[account]].active;
     }
 
+    /**
+     * @dev Calculates monthly Token amount
+     * @param distribution  Percentage of salary in token 
+     * @param monthlySalary Monthly salary in EUR
+     * @param tokenDecimals Token decimal places
+     * @param rate          Token/EUR exchange rate 
+     * @return Token amount
+     */ 
+    function calculateTokenAmount(uint256 distribution, uint256 monthlySalary, uint256 tokenDecimals, uint256 rate)
+        pure
+        internal
+        returns(uint256 amount)
+    {   
+        uint256 decimalsCast = 10 ** tokenDecimals;
+        amount = (monthlySalary.mul(distribution).div(10000)).mul(decimalsCast).div(rate);
+    }
     
     /**
      * @dev Checks if a token is allowed

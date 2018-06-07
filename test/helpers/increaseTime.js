@@ -1,9 +1,9 @@
 // Increases testrpc time by the passed duration in seconds
-module.exports = function increaseTime(duration) {
+module.exports = (duration) => {
     const id = Date.now()
   
     return new Promise((resolve, reject) => {
-        web3.currentProvider.sendAsync({
+        return web3.currentProvider.sendAsync({
             jsonrpc: '2.0',
             method: 'evm_increaseTime',
             params: [duration],
@@ -19,4 +19,5 @@ module.exports = function increaseTime(duration) {
             })
         })
     })
+
 }

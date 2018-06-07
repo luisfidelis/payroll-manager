@@ -4,7 +4,10 @@ const should = require("chai")
     .use(require("chai-as-promised"))
     .should()
 const expect = require("chai").expect
+
+// helpers
 const eur = require("./helpers/ether")
+const increaseTime = require("./helpers/increaseTime")
 
 // --- Handled contracts
 const PayrollManager = artifacts.require("./payroll/PayrollManager.sol")
@@ -19,14 +22,17 @@ let oracle = null
 let owner = null
 let employee_1 = { yearlyEURSalary : eur(120000) }
 let employee_2 = { yearlyEURSalary : eur(240000) }
-let employee_3 = { yearlyEURSalary : eur(320000) }
+let employee_3 = { yearlyEURSalary : eur(360000) }
 
 // useful variables
 let employeesAdded = 0
 
-let token_1 = { rate: 1 }
-let token_2 = { rate: 2 }
-let token_3 = { rate: 3 }
+let token_1 = { rate: new BigNumber(1000000000000000000) }
+let tokenInstance_1 = null
+let token_2 = { rate: new BigNumber(500000000000000000) }
+let tokenInstance_2 = null
+let token_3 = { rate: new BigNumber(2000000000000000000) }
+let tokenInstance_3 = null
 
 contract("PayrollManager", async accounts => {
 
@@ -38,12 +44,12 @@ contract("PayrollManager", async accounts => {
         employee_3.account = accounts[3]
         oracle = accounts[4]
 
-        let token = await EURToken.new({ from: owner })
-        token_1.address = token.address
-        token = await EURToken.new({ from: owner })
-        token_2.address = token.address
-        token = await EURToken.new({ from: owner })
-        token_3.address = token.address
+        tokenInstance_1 = await EURToken.new({ from: owner })
+        token_1.address = tokenInstance_1.address
+        tokenInstance_2 = await EURToken.new({ from: owner })
+        token_2.address = tokenInstance_2.address
+        tokenInstance_3 = await EURToken.new({ from: owner })
+        token_3.address = tokenInstance_3.address
         
         eurToken = await EURToken.new({ from: owner })
         payroll = await PayrollManager.new(eurToken.address, oracle, { from: owner })
@@ -369,6 +375,29 @@ contract("PayrollManager", async accounts => {
         
     })
 
+    context('Set token exchange rate', async () => {
+
+        it("should deny update token exchange rate by non-oracle", async () => {
+            await payroll.setExchangeRate(
+                token_2.address, 
+                token_2.rate,
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should update token exchange rate", async () => {
+            await payroll.setExchangeRate(
+                token_2.address, 
+                token_2.rate,
+                { from: oracle }
+            )
+            const tokenRate = await payroll.getTokenRate(token_2.address)
+            assert.equal(tokenRate.toNumber(), token_2.rate.toNumber(), "Token's exchange rate must be updated correctly" )
+        })
+        
+    })
+
+
     context('Payday', () => {
         
         it("should deny withdraw salary by non-employee", async () => {
@@ -382,9 +411,184 @@ contract("PayrollManager", async accounts => {
                 { from: employee_1.account }
             ).should.be.rejectedWith("VM Exception")
         })
+        
+        it("should deny withdraw salary in tokens without exchange rate", async () => {
+            // simulates 1 MONTH after
+            const MONTH = await payroll.MONTH()
+            await increaseTime(MONTH.toNumber())
+            await payroll.payday(
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should deny withdraw salary if the PayrollManager has no funds", async () => {
+            await payroll.setExchangeRate(token_1.address, token_1.rate, { from: oracle })
+            await payroll.payday(
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should withdraw salary completaly in EUR", async () => {
+            await eurToken.transfer(payroll.address, eur(20000), { from: owner} )
+            const previousEmployeeEURBalance = await eurToken.balanceOf(employee_2.account)
+            const previousPayrollEURBalance = await eurToken.balanceOf(payroll.address)
+            const { logs } = await payroll.payday(
+                { from: employee_2.account }
+            )
+
+            const event = logs.find(e => e.event === "LogSalaryWithdrawal")
+            const args = event.args
+            expect(args).to.include.all.keys([ "employeeId", "timestamp" ])
+            assert.equal(args.employeeId.toNumber(), employee_2.id.toNumber(), "The employee must be correct")
+            
+            const currentEmployeeEURBalance = await eurToken.balanceOf(employee_2.account)
+            const currentPayrollEURBalance = await eurToken.balanceOf(payroll.address)
+            
+            // test balances
+            currentEmployeeEURBalance.toNumber().should.equal(
+                previousEmployeeEURBalance
+                .plus(previousPayrollEURBalance)
+                .minus(currentPayrollEURBalance)
+                .toNumber()
+            )           
+            
+            currentEmployeeEURBalance.toNumber().should.equal(
+                previousEmployeeEURBalance
+                .plus(eur(20000))
+                .toNumber()
+            )         
+            
+            // test time lock
+            const employee = await payroll.getEmployee(
+                employee_2.id,
+                { from: owner }
+            )
+            const MONTH = await payroll.MONTH()
+            const expectedTimelock = args.timestamp.plus(MONTH)
+            assert.equal(employee[3].toNumber(), expectedTimelock.toNumber(), "The employee should have 1 month time lock" )
+
+        })
+
+        it("should withdraw salary partially in tokens and EUR", async () => {
+            await tokenInstance_1.transfer(payroll.address, eur(10000), { from: owner} )
+            await eurToken.transfer(payroll.address, eur(10000), { from: owner} )
+            
+            const previousEmployeeTokenBalance = await tokenInstance_1.balanceOf(employee_1.account)
+            const previousPayrollTokenBalance = await tokenInstance_1.balanceOf(payroll.address)
+            const previousEmployeeEURBalance = await eurToken.balanceOf(employee_1.account)
+            const previousPayrollEURBalance = await eurToken.balanceOf(payroll.address)
+
+            const {logs} = await payroll.payday(
+                { from: employee_1.account }
+            )
+           
+            const currentEmployeeTokenBalance = await tokenInstance_1.balanceOf(employee_1.account)
+            const currentPayrollTokenBalance = await tokenInstance_1.balanceOf(payroll.address)
+            const currentEmployeeEURBalance = await eurToken.balanceOf(employee_1.account)
+            const currentPayrollEURBalance = await eurToken.balanceOf(payroll.address)
+
+           
+            // test balances
+            currentEmployeeEURBalance.toNumber().should.equal(
+                previousEmployeeEURBalance
+                .plus(previousPayrollEURBalance)
+                .minus(currentPayrollEURBalance)
+                .toNumber()
+            )           
+            
+            currentEmployeeEURBalance.toNumber().should.equal(
+                previousEmployeeEURBalance
+                .plus(eur(10000))
+                .toNumber()
+            )  
+            
+            currentEmployeeTokenBalance.toNumber().should.equal(
+                previousEmployeeTokenBalance
+                .plus(previousPayrollTokenBalance)
+                .minus(currentPayrollTokenBalance)
+                .toNumber()
+            )           
+            
+            currentEmployeeTokenBalance.toNumber().should.equal(
+                previousEmployeeTokenBalance
+                .plus(eur(10000))
+                .toNumber()
+            )  
+
+        })
+
+        it("should withdraw salary completaly in tokens", async () => {
+            // set parameters
+            await payroll.determineAllocation( [token_1.address, token_2.address, token_3.address], [5000,2500,2500], { from: employee_3.account })
+            await payroll.setExchangeRate(token_3.address, token_3.rate, { from: oracle })
+
+            await tokenInstance_1.transfer(payroll.address, eur(15000), { from: owner} )
+            await tokenInstance_2.transfer(payroll.address, eur(15000), { from: owner} )
+            await tokenInstance_3.transfer(payroll.address, eur(3750), { from: owner} )
+            
+            const previousEmployeeTokenBalance_1 = await tokenInstance_1.balanceOf(employee_3.account)
+            const previousPayrollTokenBalance_1 = await tokenInstance_1.balanceOf(payroll.address)
+            const previousEmployeeTokenBalance_2 = await tokenInstance_2.balanceOf(employee_3.account)
+            const previousPayrollTokenBalance_2= await tokenInstance_2.balanceOf(payroll.address)
+            const previousEmployeeTokenBalance_3 = await tokenInstance_3.balanceOf(employee_3.account)
+            const previousPayrollTokenBalance_3 = await tokenInstance_3.balanceOf(payroll.address)
+
+            const {logs} = await payroll.payday(
+                { from: employee_3.account }
+            )
+           
+            const currentEmployeeTokenBalance_1 = await tokenInstance_1.balanceOf(employee_3.account)
+            const currentPayrollTokenBalance_1 = await tokenInstance_1.balanceOf(payroll.address)
+            const currentEmployeeTokenBalance_2 = await tokenInstance_2.balanceOf(employee_3.account)
+            const currentPayrollTokenBalance_2= await tokenInstance_2.balanceOf(payroll.address)
+            const currentEmployeeTokenBalance_3 = await tokenInstance_3.balanceOf(employee_3.account)
+            const currentPayrollTokenBalance_3 = await tokenInstance_3.balanceOf(payroll.address)
+
+            
+            // test balances
+ 
+            currentEmployeeTokenBalance_1.toNumber().should.equal(
+                previousEmployeeTokenBalance_1
+                .plus(previousPayrollTokenBalance_1)
+                .minus(currentPayrollTokenBalance_1)
+                .toNumber()
+            )           
+            
+            currentEmployeeTokenBalance_1.toNumber().should.equal(
+                previousEmployeeTokenBalance_1
+                .plus(eur(15000))
+                .toNumber()
+            )  
+
+            currentEmployeeTokenBalance_2.toNumber().should.equal(
+                previousEmployeeTokenBalance_2
+                .plus(previousPayrollTokenBalance_2)
+                .minus(currentPayrollTokenBalance_2)
+                .toNumber()
+            )           
+            
+            currentEmployeeTokenBalance_2.toNumber().should.equal(
+                previousEmployeeTokenBalance_2
+                .plus(eur(15000))
+                .toNumber()
+            )
+
+            currentEmployeeTokenBalance_3.toNumber().should.equal(
+                previousEmployeeTokenBalance_3
+                .plus(previousPayrollTokenBalance_3)
+                .minus(currentPayrollTokenBalance_3)
+                .toNumber()
+            )           
+            
+            currentEmployeeTokenBalance_3.toNumber().should.equal(
+                previousEmployeeTokenBalance_3
+                .plus(eur(3750))
+                .toNumber()
+            )
+          
+
+        })
 
     })
-
-
 
 })

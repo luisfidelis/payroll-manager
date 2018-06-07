@@ -73,3 +73,9 @@ and optimize employee's time locks treatment.
 
 * The Oracle responsible for updating token exchange rates is just illustrative. Solutions such as Oraclize can be used for integrating 
 the Smart Contract with a real-world API and fetch token rates correctly.
+
+* Solidity tests will be necessary in the future, when considering functions with non-trivial returns. This is a limit of JavaScript
+tests.
+
+* The solution was built to distribute employee's salary in ERC20 Tokens: partially in EUR and other tokens,
+completaly in EUR or in other tokens. The possibility for including ETHER in the distribution would be great.
