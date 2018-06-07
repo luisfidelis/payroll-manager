@@ -716,6 +716,10 @@ contract("PayrollManager", async accounts => {
 
         it("should deny state changes after escape hatch", async() => {
             
+            await payroll.addFunds(
+                {from: owner, value: eur(1)}
+            ).should.be.rejectedWith("VM Exception")
+            
             await payroll.addEmployee(
                 employee_4.account,
                 [token_1.address],
@@ -760,9 +764,6 @@ contract("PayrollManager", async accounts => {
                 { from: employee_1.account }
             ).should.be.rejectedWith("VM Exception")
             
-
-
-
         })
 
     })

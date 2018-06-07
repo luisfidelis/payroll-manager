@@ -77,6 +77,7 @@ contract PayrollManager is Ownable {
 
     /**
      * @param _eurToken Address of EUR Token
+     * @param _oracle   Oracle Exchange Rate address
      */  
     constructor(address _eurToken, address _oracle) public {
         eurToken = _eurToken;
@@ -316,6 +317,7 @@ contract PayrollManager is Ownable {
     /**
      * @dev Retrieves token's rate
      * @param token  Token address 
+     * @return Rate
      */ 
     function getTokenRate(address token) 
         view 
@@ -328,6 +330,7 @@ contract PayrollManager is Ownable {
     /**
      * @dev Checks if an address matches an active employee
      * @param account Employee account 
+     * @return Active check
      */ 
     function isEmployee(address account) 
         view 
