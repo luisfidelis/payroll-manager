@@ -261,6 +261,44 @@ contract("PayrollManager", async accounts => {
 
     })
 
+    context('Change employee account', () => {
+        
+        it("should deny change employee's account by non-employee", async () => {
+            await payroll.changeAccount(
+                accounts[5],
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should deny change employee's account with an invalid value", async () => {
+            await payroll.changeAccount(
+                "0x0",
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should deny change employee's account with a wallet beeing used", async () => {
+            await payroll.changeAccount(
+                employee_2.account,
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should change employee's account", async () => {
+            const { logs } = await payroll.changeAccount(
+                accounts[5],
+                { from: employee_1.account }
+            )
+            const event = logs.find(e => e.event === "LogAccountChanged")
+            const args = event.args
+            expect(args).to.include.all.keys([ "employeeId", "account" ])
+            assert.equal(args.employeeId.toNumber(), employee_1.id.toNumber(), "The first employee must be updated")
+            assert.equal(args.account, accounts[5], "The account must be updated correctly" )
+            employee_1.account = accounts[5]
+        })
+
+    })
+
     context('Allocate salary in tokens', () => {
         
         it("should deny allocate salary by non-employee", async () => {
