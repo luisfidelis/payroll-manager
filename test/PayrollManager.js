@@ -36,7 +36,7 @@ contract("PayrollManager", async accounts => {
 
     })
 
-    context('Manage employees', () => {
+    context('Add employee', () => {
         
         it("should only allow add a new employee by the owner", async () => {
             await payroll.addEmployee(
