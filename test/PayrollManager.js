@@ -24,6 +24,7 @@ let owner = null
 let employee_1 = { yearlyEURSalary : eur(120000) }
 let employee_2 = { yearlyEURSalary : eur(240000) }
 let employee_3 = { yearlyEURSalary : eur(360000) }
+let employee_4 = { yearlyEURSalary : eur(360000) }
 
 // useful variables
 let employeesAdded = 0
@@ -47,6 +48,7 @@ contract("PayrollManager", async accounts => {
         employee_1.account = accounts[1]
         employee_2.account = accounts[2]
         employee_3.account = accounts[3]
+        employee_4.account = accounts[6]
         oracle = accounts[4]
 
         tokenInstance_1 = await EURToken.new({ from: owner })
@@ -632,6 +634,134 @@ contract("PayrollManager", async accounts => {
                 .toNumber()
             )
           
+
+        })
+
+    })
+
+    context('Escape Hatch', () => {
+        
+        it("should only allow escape hatch call by the owner", async () => {
+            await payroll.escapeHatch(
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should allow escape hatch", async() => {
+
+            const previousOwnerBalance = await getBalance(owner)
+            const previousPayrollBalance = await getBalance(payroll.address)
+
+            const { receipt } = await payroll.escapeHatch({ from: owner })
+
+            const isLive = await payroll.live()
+            assert.equal(isLive, false, "The contract must be dead")
+
+            const currentOwnerBalance = await getBalance(owner)
+            const currentPayrollBalance = await getBalance(payroll.address)
+            const gasUsed = new BigNumber(receipt.gasUsed)
+
+            currentOwnerBalance.toNumber().should.equal(
+                previousOwnerBalance
+                .plus(previousPayrollBalance)
+                .minus(gasPrice.times(gasUsed))
+                .toNumber()
+            )
+
+            currentPayrollBalance.toNumber().should.equal(0)
+        })
+
+        it("should deny a second escape hatch", async() => {
+            await payroll.escapeHatch(
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should allow employee's pending withdrawal after escape hatch", async() => {
+            
+            const MONTH = await payroll.MONTH()
+            await increaseTime(MONTH.toNumber())
+
+            await eurToken.transfer(payroll.address, eur(20000), { from: owner} )
+
+            const { logs } = await payroll.payday(
+                { from: employee_2.account }
+            )
+
+            const event = logs.find(e => e.event === "LogSalaryWithdrawal")
+            const args = event.args
+            assert.equal(args.employeeId.toNumber(), employee_2.id.toNumber(), "The employee must be correct")
+
+            // employee is inactive
+            await payroll.getEmployee(
+                employee_2.id,
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+           
+
+        })
+
+        it("should deny employee's withdrawal after escape hatch (when inactive)", async() => {
+            
+            const MONTH = await payroll.MONTH()
+            await increaseTime(MONTH.toNumber())
+
+            await eurToken.transfer(payroll.address, eur(20000), { from: owner} )
+
+            await payroll.payday(
+                { from: employee_2.account }
+            ).should.be.rejectedWith("VM Exception")
+
+        })
+
+        it("should deny state changes after escape hatch", async() => {
+            
+            await payroll.addEmployee(
+                employee_4.account,
+                [token_1.address],
+                employee_4.yearlyEURSalary,
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+
+            await payroll.removeEmployee(
+                employee_1.id,
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+
+            await payroll.setEmployeeSalary(
+                employee_1.id,
+                employee_1.yearlyEURSalary.times(2),
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+
+            await payroll.setEmployeeSalary(
+                employee_1.id,
+                employee_1.yearlyEURSalary.times(2),
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+
+            await payroll.changeAccount(
+                accounts[7],
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+
+            await payroll.setExchangeRate(
+                token_2.address, 
+                token_2.rate,
+                { from: oracle }
+            ).should.be.rejectedWith("VM Exception")
+
+            const MONTH = await payroll.MONTH()
+            await increaseTime(MONTH.times(6).toNumber())
+
+            await payroll.determineAllocation(
+                [token_1.address],
+                [7000],
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+            
+
+
 
         })
 

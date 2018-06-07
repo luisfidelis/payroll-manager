@@ -25,6 +25,8 @@ contract PayrollManager is Ownable {
     uint public totalEmployees;
     address public eurToken;
     address public oracle;
+    // escape hatch treatment
+    bool public live;
 
     //@todo Add an Oracle to deal with dates 
     uint256 constant public MONTH = 2592000;
@@ -68,12 +70,18 @@ contract PayrollManager is Ownable {
         _;
     } 
 
+    modifier onlyLive(){
+        require(live, "The contract is dead");
+        _;
+    } 
+
     /**
      * @param _eurToken Address of EUR Token
      */  
     constructor(address _eurToken, address _oracle) public {
         eurToken = _eurToken;
         oracle = _oracle;
+        live = true;
     }
 
     /**
@@ -81,6 +89,7 @@ contract PayrollManager is Ownable {
      */ 
     function addFunds()
         onlyOwner
+        onlyLive
         payable
         external
     {   
@@ -96,6 +105,7 @@ contract PayrollManager is Ownable {
      */ 
     function addEmployee(address account, address[] allowedTokens, uint256 initialYearlyEURSalary)
         onlyOwner
+        onlyLive
         external
     {   
         require(account != address(0), "The account is an invalid address");
@@ -123,6 +133,7 @@ contract PayrollManager is Ownable {
      */ 
     function setEmployeeSalary(uint employeeId, uint256 yearlyEURSalary)
         onlyOwner
+        onlyLive
         onlyActiveEmployee(employeeId)
         external
     {
@@ -136,6 +147,7 @@ contract PayrollManager is Ownable {
      */ 
     function removeEmployee(uint employeeId)
         onlyOwner
+        onlyLive
         onlyActiveEmployee(employeeId)
         external
     {   
@@ -199,16 +211,20 @@ contract PayrollManager is Ownable {
     }
     
     /**
-     * @dev Calculates days until the contract can run out of funds
-     * @return Days count
-     */ 
-    // function calculatePayrollRunway() 
-    //     onlyOwner
-    //     view 
-    //     returns (uint256 runWay)
-    // {
-
-    // }
+     * @dev Transfer funds to the owner account and turn off state changes
+    */ 
+    function escapeHatch() 
+        onlyOwner
+        onlyLive
+        external
+    {
+        live = false;
+        /**
+         * Employees doesn't withdraws salary in ETHER, so, this makes sense in this context.
+         * In a context witch employees can receive funds in ETHER this function needs a better treatment
+         */
+        owner.transfer(address(this).balance);
+    }
 
     /**
      * @dev Updates employee account
@@ -216,6 +232,7 @@ contract PayrollManager is Ownable {
      */ 
     function changeAccount(address account)
         onlyEmployee
+        onlyLive
         external
     {
         require(account != address(0), "The account is an invalid address");
@@ -234,6 +251,7 @@ contract PayrollManager is Ownable {
      */ 
     function determineAllocation(address[] tokens, uint256[] distribution)
         onlyEmployee
+        onlyLive
         external
     {
         Employee storage employee = employees[accounts[msg.sender]];
@@ -261,6 +279,8 @@ contract PayrollManager is Ownable {
         Employee storage employee = employees[accounts[msg.sender]];
         require(now.sub(employee.paydayTimelock) >= 0, "The employee is time locked for withdrawal");
         employee.paydayTimelock = now.add(MONTH);
+        // inactive employee if the contract is dead
+        if(!live) employee.active = false;
         uint256 monthlySalary = employee.yearlyEURSalary.div(12); 
         uint256 distributed;
         for(uint256 index = 0; index < employee.tokens.length; index++){
@@ -286,6 +306,7 @@ contract PayrollManager is Ownable {
      * @param EURExchangeRate EUR exchange rate
      */ 
     function setExchangeRate(address token, uint256 EURExchangeRate)
+        onlyLive
         external
     {
         require(msg.sender == oracle, "The wallet isn't the oracle");
