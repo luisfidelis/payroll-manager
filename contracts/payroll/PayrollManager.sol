@@ -211,7 +211,7 @@ contract PayrollManager is Ownable {
     /**
      * @dev Allocates salary in tokens
      * @param tokens          Token addresses
-     * @param distribution    Distribution values. Value range: (0%) 0 ~ 10000 (100%)
+     * @param distribution    Distribution values. Value range: (0.00%) 0 ~ 10000 (100.00%)
      */ 
     function determineAllocation(address[] tokens, uint256[] distribution)
         onlyEmployee
@@ -304,7 +304,7 @@ contract PayrollManager is Ownable {
 
     
     /**
-     * @dev Checks if an token is allowed
+     * @dev Checks if a token is allowed
      * @param token         Token address
      * @param allowedTokens Allowed tokens
      * @return allowance

@@ -2,7 +2,7 @@
 
 A simple payroll manager. 
 
-#### NOTE: This repository is not intended to be used on a main net. Be carefull :)
+#### NOTE: This repository is not intended to be used on mainnet. Be careful :)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Build Status](https://travis-ci.org/luisfidelis/payroll-manager.svg?branch=master)](https://travis-ci.org/luisfidelis/payroll-manager)
@@ -15,7 +15,7 @@ A simple payroll manager.
 
 ## Contracts
 
-### [PayrollManager.sol](https://github.com/luisfidelis/payroll-manager/tree/master/contracts/payroll)
+### [PayrollManager.sol](https://github.com/luisfidelis/payroll-manager/tree/master/contracts/payroll/PayrollManager.sol)
 
 Owners can:
 * Add or remove employees;
@@ -26,6 +26,10 @@ Employees can:
 * Allocate their salaries in allowed ERC20 tokens;
 * Update account addresses;
 * Withdraw salaries monthly;
+
+### [EURToken.sol](https://github.com/luisfidelis/payroll-manager/tree/master/contracts/token/EURToken.sol)
+
+Payroll base currency.
 
 ## Setup
 

@@ -21,6 +21,9 @@ let employee_1 = { yearlyEURSalary : eur(120000) }
 let employee_2 = { yearlyEURSalary : eur(240000) }
 let employee_3 = { yearlyEURSalary : eur(320000) }
 
+// useful variables
+let activeEmployees = 0
+
 contract("PayrollManager", async accounts => {
 
     before( async () => {
@@ -65,15 +68,12 @@ contract("PayrollManager", async accounts => {
             )
             const event = logs.find(e => e.event === "LogEmployeeAdded")
             const args = event.args
-            expect(args).to.include.all.keys([
-                "accountAddress",
-                "employeeId",
-                "initialYearlyEURSalary"
-            ])
+            expect(args).to.include.all.keys([ "accountAddress", "employeeId", "initialYearlyEURSalary" ])
             assert.equal(args.accountAddress, employee_1.account, "Employee's account must be registered")
             assert.equal(args.employeeId.toNumber(), 1, "The employee must be the first employee" )
             assert.equal(args.initialYearlyEURSalary.toNumber(), employee_1.yearlyEURSalary.toNumber(), "The yearly salary must be the expected")
-            employee_1.employeeId = args.employeeId
+            employee_1.id = args.employeeId
+            activeEmployees++
         })
 
         it("should deny add an employee with an existing account", async () => {
@@ -83,6 +83,40 @@ contract("PayrollManager", async accounts => {
                 employee_1.yearlyEURSalary,
                 { from: owner }
             ).should.be.rejectedWith("VM Exception")
+        })
+
+    })
+
+    context('Change employee salary', () => {
+        
+        it("should only allow update employee's salary by the owner", async () => {
+            await payroll.setEmployeeSalary(
+                employee_1.id,
+                employee_1.yearlyEURSalary.times(2),
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should deny update an invalid employee", async () => {
+            await payroll.setEmployeeSalary(
+                activeEmployees+1,
+                employee_1.yearlyEURSalary.times(2),
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should update employee's salary", async () => {
+            const { logs } = await payroll.setEmployeeSalary(
+                employee_1.id,
+                employee_1.yearlyEURSalary.times(2),
+                { from: owner }
+            )
+            const event = logs.find(e => e.event === "LogEmployeeSalaryChanged")
+            const args = event.args
+            expect(args).to.include.all.keys([ "employeeId", "yearlyEURSalary" ])
+            assert.equal(args.employeeId.toNumber(), employee_1.id.toNumber(), "The first employee must be updated")
+            assert.equal(args.yearlyEURSalary.toNumber(), employee_1.yearlyEURSalary.times(2).toNumber(), "The salary must be updated correctly" )
+            employee_1.yearlyEURSalary = employee_1.yearlyEURSalary.times(2)
         })
 
     })
