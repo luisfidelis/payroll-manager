@@ -91,7 +91,7 @@ contract("PayrollManager", async accounts => {
         
         it("should only allow update employee's salary by the owner", async () => {
             await payroll.setEmployeeSalary(
-                employee_1.id,
+                employee_2.account,
                 employee_1.yearlyEURSalary.times(2),
                 { from: employee_1.account }
             ).should.be.rejectedWith("VM Exception")
@@ -120,5 +120,48 @@ contract("PayrollManager", async accounts => {
         })
 
     })
+
+    context('Remove employee', () => {
+        
+        before( async () => {
+            const { logs } = await payroll.addEmployee(
+                employee_2.account,
+                [],
+                employee_2.yearlyEURSalary,
+                { from: owner }
+            )
+            const event = logs.find(e => e.event === "LogEmployeeAdded")
+            employee_2.id = event.args.employeeId
+            activeEmployees++;
+        })
+
+        it("should only allow remove employee by the owner", async () => {
+            await payroll.removeEmployee(
+                employee_2.id,
+                { from: employee_2.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should deny remove an invalid employee", async () => {
+            await payroll.removeEmployee(
+                activeEmployees+1,
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should remove the employee", async () => {
+            const { logs } = await payroll.removeEmployee(
+                employee_2.id,
+                { from: owner }
+            )
+            const event = logs.find(e => e.event === "LogEmployeeRemoved")
+            const args = event.args
+            expect(args).to.include.all.keys([ "employeeId" ])
+            assert.equal(args.employeeId.toNumber(), employee_2.id.toNumber(), "The second employee must be removed")
+            employee_2.id = null
+        })
+
+    })
+
 
 })
