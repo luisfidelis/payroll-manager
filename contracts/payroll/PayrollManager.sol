@@ -26,7 +26,7 @@ contract PayrollManager is Ownable {
     address public oracle;
 
     //@todo Add an Oracle to deal with dates 
-    uint256 constant MONTH = 2592000;
+    uint256 constant public MONTH = 2592000;
     
     /**
      * Types   
@@ -49,7 +49,7 @@ contract PayrollManager is Ownable {
     event LogEmployeeSalaryChanged(uint indexed employeeId, uint256 yearlyEURSalary);
     event LogEmployeeRemoved(uint employeeId);
     event LogFundsAdded(uint amount);
-    event LogSalaryAllocationChanged(uint indexed employeeId, address[] tokens, uint256[] distribution);
+    event LogSalaryAllocationChanged(uint indexed employeeId, address[] tokens, uint256[] distribution, uint256 timestamp);
     event LogAccountChanged(uint indexed employeeId, address account);
     event LogSalaryWithdrawal(uint indexed employeeId, uint256 timestamp);
     
@@ -210,59 +210,6 @@ contract PayrollManager is Ownable {
     // }
 
     /**
-     * @dev Allocates salary in tokens
-     * @param tokens          Token addresses
-     * @param distribution    Distribution values. Value range: (0.00%) 0 ~ 10000 (100.00%)
-     */ 
-    function determineAllocation(address[] tokens, uint256[] distribution)
-        onlyEmployee
-        external
-    {
-        Employee storage employee = employees[accounts[msg.sender]];
-        require(now.sub(employee.allocationTimelock) >= 0, "The employee is time locked for allocations"); 
-        require(tokens.length == distribution.length, "Token list length doesn't matches distribution length");
-        uint256 totalDistribution;
-        for(uint index = 0; index < tokens.length; index++){
-            require(isAllowed(tokens[index], employee.allowedTokens), "A token is not allowed");
-            totalDistribution.add(distribution[index]);
-        }
-        require(totalDistribution <= 10000, "The distribution exceeds 100%");
-        employee.tokens = tokens;
-        employee.distribution = distribution;
-        employee.allocationTimelock = now.add(MONTH.mul(6));
-        emit LogSalaryAllocationChanged(accounts[msg.sender], tokens, distribution);
-    }
-
-    /**
-     * @dev Withdraws employee salary
-     */ 
-    function payday()
-        onlyEmployee
-        external
-    {
-        Employee storage employee = employees[accounts[msg.sender]];
-        require(now.sub(employee.paydayTimelock) >= 0, "The employee is time locked for withdrawal");
-        employee.paydayTimelock = now.add(MONTH);
-        uint256 monthlySalary = employee.yearlyEURSalary.div(12); 
-        uint256 distributed;
-        for(uint index = 0; index < employee.tokens.length; index++){
-            if(employee.distribution[index] != 0){
-                address token = employee.tokens[index];
-                require(rates[token] != 0, "Missing token rate");
-                uint256 distribution = employee.distribution[index];
-                StandardToken _token = StandardToken(token);
-                require(_token.transfer(msg.sender, rates[token].mul(monthlySalary.mul(distribution).div(10000))));
-                distributed.add(employee.distribution[index]);
-            }
-        }
-        if(distributed < 10000){
-            StandardToken _eur = StandardToken(eurToken);
-            require(_eur.transfer(msg.sender, monthlySalary.mul((uint256(10000).sub(distributed)).div(10000))));
-        }
-        emit LogSalaryWithdrawal(accounts[msg.sender], now);
-    }
-
-    /**
      * @dev Updates employee account
      * @param account New account address
      */ 
@@ -277,6 +224,59 @@ contract PayrollManager is Ownable {
         accounts[account] = accounts[msg.sender];
         delete accounts[msg.sender];
         emit LogAccountChanged(accounts[account], account);
+    }
+
+    /**
+     * @dev Allocates salary in tokens
+     * @param tokens          Token addresses
+     * @param distribution    Distribution values. Value range: (0.00%) 0 ~ 10000 (100.00%)
+     */ 
+    function determineAllocation(address[] tokens, uint256[] distribution)
+        onlyEmployee
+        external
+    {
+        Employee storage employee = employees[accounts[msg.sender]];
+        require(now.sub(employee.allocationTimelock) >= 0, "The employee is time locked for allocations"); 
+        require(tokens.length == distribution.length, "Token list length doesn't matches distribution length");
+        uint256 totalDistribution;
+        for(uint256 index = 0; index < tokens.length; index++){
+            require(isAllowed(tokens[index], employee.allowedTokens), "A token is not allowed");
+            totalDistribution = totalDistribution.add(distribution[index]);
+        }
+        require(totalDistribution < 10001, "The distribution exceeds 100%");
+        employee.tokens = tokens;
+        employee.distribution = distribution;
+        employee.allocationTimelock = now.add(MONTH.mul(6));
+        emit LogSalaryAllocationChanged(accounts[msg.sender], tokens, distribution, now);
+    }
+
+    /**
+     * @dev Withdraws employee salary
+     */ 
+    function payday()
+        onlyEmployee
+        external
+    {
+        Employee storage employee = employees[accounts[msg.sender]];
+        require(now.sub(employee.paydayTimelock) >= 0, "The employee is time locked for withdrawal");
+        employee.paydayTimelock = now.add(MONTH);
+        uint256 monthlySalary = employee.yearlyEURSalary.div(12); 
+        uint256 distributed;
+        for(uint256 index = 0; index < employee.tokens.length; index++){
+            if(employee.distribution[index] != 0){
+                address token = employee.tokens[index];
+                require(rates[token] != 0, "Missing token rate");
+                uint256 distribution = employee.distribution[index];
+                StandardToken _token = StandardToken(token);
+                require(_token.transfer(msg.sender, rates[token].mul(monthlySalary.mul(distribution).div(10000))));
+                distributed.add(employee.distribution[index]);
+            }
+        }
+        if(distributed < 10000){
+            StandardToken _eur = StandardToken(eurToken);
+            require(_eur.transfer(msg.sender, monthlySalary.mul((uint256(10000).sub(distributed)).div(10000))));
+        }
+        emit LogSalaryWithdrawal(accounts[msg.sender], now);
     }
 
     /**

@@ -261,6 +261,76 @@ contract("PayrollManager", async accounts => {
 
     })
 
+    context('Allocate salary in tokens', () => {
+        
+        it("should deny allocate salary by non-employee", async () => {
+            await payroll.determineAllocation(
+                [token_1.address],
+                [5000],
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should deny allocate salary in not allowed tokens", async () => {
+            await payroll.determineAllocation(
+                [token_2.address],
+                [5000],
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should deny allocate salary in tokens without its values", async () => {
+            await payroll.determineAllocation(
+                [token_1.address],
+                [],
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should deny surpass distribution over 100%", async () => {
+            await payroll.determineAllocation(
+                [token_1.address],
+                [10001],
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should allocate salary in tokens", async () => {
+            const { logs } = await payroll.determineAllocation(
+                [token_1.address],
+                [5000],
+                { from: employee_1.account }
+            )
+            const event = logs.find(e => e.event === "LogSalaryAllocationChanged")
+            const args = event.args
+            expect(args).to.include.all.keys([ "employeeId", "tokens", "distribution", "timestamp" ])
+            assert.equal(args.employeeId.toNumber(), employee_1.id.toNumber(), "The first employee must be updated")
+            assert.equal(args.tokens, token_1.address, "The salary must be allocated correctly" )
+            assert.equal(args.distribution, 5000, "The salary must be allocated correctly" )
+
+            const employee = await payroll.getEmployee(
+                employee_1.id,
+                { from: owner }
+            )
+            const MONTH = await payroll.MONTH()
+            const expectedTimelock = args.timestamp.plus(MONTH.times(6))
+            assert.equal(employee[4].toNumber(), expectedTimelock.toNumber(), "The employee should have 6 months time lock" )
+
+            employee_1.tokens = args.tokens
+            employee_1.distribution = args.distribution
+            employee_1.allocationTimelock = employee[4]
+        })  
+        
+        it("should deny allocate salary before the time lock", async () => {
+            await payroll.determineAllocation(
+                [token_1.address],
+                [6000],
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+        
+    })
+
 
 
 })
