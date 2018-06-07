@@ -1,7 +1,6 @@
 # Payroll Manager
 
 A simple payroll manager. 
-Allows owners to manage employees and their salaries. Allows employees to withdraw salaries and manage its distribution in ERC20 tokens.
 
 #### NOTE: This repository is not intended to be used on a main net. Be carefull :)
 
@@ -45,7 +44,7 @@ Run migrations:
 $ npm run migrate
 ```
 
-The script scripts/test.sh creates a local network and calls Truffle's tests.
+The script ```scripts/test.sh``` creates a local network and calls Truffle's tests.
 
 Type
 ```
