@@ -369,6 +369,22 @@ contract("PayrollManager", async accounts => {
         
     })
 
+    context('Payday', () => {
+        
+        it("should deny withdraw salary by non-employee", async () => {
+            await payroll.payday(
+                { from: owner }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should deny withdraw salary before the time lock", async () => {
+            await payroll.payday(
+                { from: employee_1.account }
+            ).should.be.rejectedWith("VM Exception")
+        })
+
+    })
+
 
 
 })
