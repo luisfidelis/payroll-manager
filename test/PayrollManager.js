@@ -192,6 +192,44 @@ contract("PayrollManager", async accounts => {
 
     })
 
+    
+    context('Retrieve payroll burn rate', () => {
+        
+        before( async () => {
+            let { logs } = await payroll.addEmployee(
+                employee_2.account,
+                [],
+                employee_2.yearlyEURSalary,
+                { from: owner }
+            )
+            let event = logs.find(e => e.event === "LogEmployeeAdded")
+            employee_2.id = event.args.employeeId
+
+            const transaction = await payroll.addEmployee(
+                employee_3.account,
+                [],
+                employee_3.yearlyEURSalary,
+                { from: owner }
+            )
+            event = transaction.logs.find(e => e.event === "LogEmployeeAdded")
+            employee_3.id = event.args.employeeId
+
+            employeesAdded += 2;
+        })
+
+        it("should only allow calculate burn rate by the owner", async () => {
+            await payroll.calculatePayrollBurnrate({
+                from: employee_1.account 
+            }).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should calculate burn rate", async () => {
+            const burnRate = await payroll.calculatePayrollBurnrate({ from: owner })
+            const expectedBurnRate = employee_1.yearlyEURSalary.plus(employee_2.yearlyEURSalary.plus(employee_3.yearlyEURSalary)).div(12)
+            assert.equal(burnRate.toNumber(), expectedBurnRate, "The burn rate must be calculated correctly") 
+        })
+
+    })
 
 
 

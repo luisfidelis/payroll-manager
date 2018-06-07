@@ -70,7 +70,7 @@ contract PayrollManager is Ownable {
     /**
      * @param _eurToken Address of EUR Token
      */  
-    constructor(address _eurToken, address _oracle) {
+    constructor(address _eurToken, address _oracle) public {
         eurToken = _eurToken;
         oracle = _oracle;
     }
