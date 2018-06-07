@@ -24,6 +24,10 @@ let employee_3 = { yearlyEURSalary : eur(320000) }
 // useful variables
 let employeesAdded = 0
 
+let token_1 = { rate: 1 }
+let token_2 = { rate: 2 }
+let token_3 = { rate: 3 }
+
 contract("PayrollManager", async accounts => {
 
     before( async () => {
@@ -34,6 +38,13 @@ contract("PayrollManager", async accounts => {
         employee_3.account = accounts[3]
         oracle = accounts[4]
 
+        let token = await EURToken.new({ from: owner })
+        token_1.address = token.address
+        token = await EURToken.new({ from: owner })
+        token_2.address = token.address
+        token = await EURToken.new({ from: owner })
+        token_3.address = token.address
+        
         eurToken = await EURToken.new({ from: owner })
         payroll = await PayrollManager.new(eurToken.address, oracle, { from: owner })
 
@@ -44,7 +55,7 @@ contract("PayrollManager", async accounts => {
         it("should only allow add a new employee by the owner", async () => {
             await payroll.addEmployee(
                 employee_1.account,
-                [],
+                [token_1.address],
                 employee_1.yearlyEURSalary,
                 { from: employee_1.account }
             ).should.be.rejectedWith("VM Exception")
@@ -53,7 +64,7 @@ contract("PayrollManager", async accounts => {
         it("should deny a new employee with an invalid address", async () => {
             await payroll.addEmployee(
                 "0x0",
-                [],
+                [token_1.address],
                 employee_1.yearlyEURSalary,
                 { from: owner }
             ).should.be.rejectedWith("VM Exception")
@@ -62,7 +73,7 @@ contract("PayrollManager", async accounts => {
         it("should add a new employee", async () => {
             const { logs } = await payroll.addEmployee(
                 employee_1.account,
-                [],
+                [token_1.address],
                 employee_1.yearlyEURSalary,
                 { from: owner }
             )
@@ -73,13 +84,14 @@ contract("PayrollManager", async accounts => {
             assert.equal(args.employeeId.toNumber(), 1, "The employee must be the first employee" )
             assert.equal(args.initialYearlyEURSalary.toNumber(), employee_1.yearlyEURSalary.toNumber(), "The yearly salary must be the expected")
             employee_1.id = args.employeeId
+            employee_1.allowedTokens = [token_1.address]
             employeesAdded++
         })
 
         it("should deny add an employee with an existing account", async () => {
             await payroll.addEmployee(
                 employee_1.account,
-                [],
+                [token_1.address],
                 employee_1.yearlyEURSalary,
                 { from: owner }
             ).should.be.rejectedWith("VM Exception")
@@ -111,6 +123,7 @@ contract("PayrollManager", async accounts => {
             expect(employee).to.have.length(7);
             assert.equal(employee[0], employee_1.account, "The retrieved employee must be the first employee") // account
             assert.equal(employee[1].toNumber(), employee_1.yearlyEURSalary.toNumber(), "The retrieved employee must be correct")
+            assert.equal(employee[2][0], employee_1.allowedTokens[0], "The retrieved employee must be correct")
             assert.equal(employee[4].toNumber(), 0, "The employee shouldn't have allocation time lock" )
         })
 
@@ -120,7 +133,7 @@ contract("PayrollManager", async accounts => {
         
         it("should only allow update employee's salary by the owner", async () => {
             await payroll.setEmployeeSalary(
-                employee_2.account,
+                employee_1.id,
                 employee_1.yearlyEURSalary.times(2),
                 { from: employee_1.account }
             ).should.be.rejectedWith("VM Exception")
@@ -155,7 +168,7 @@ contract("PayrollManager", async accounts => {
         before( async () => {
             const { logs } = await payroll.addEmployee(
                 employee_2.account,
-                [],
+                [token_1.address, token_2.address],
                 employee_2.yearlyEURSalary,
                 { from: owner }
             )
@@ -198,21 +211,23 @@ contract("PayrollManager", async accounts => {
         before( async () => {
             let { logs } = await payroll.addEmployee(
                 employee_2.account,
-                [],
+                [token_1.address, token_2.address],
                 employee_2.yearlyEURSalary,
                 { from: owner }
             )
             let event = logs.find(e => e.event === "LogEmployeeAdded")
             employee_2.id = event.args.employeeId
+            employee_2.allowedTokens = [token_1.address, token_2.address]
 
             const transaction = await payroll.addEmployee(
                 employee_3.account,
-                [],
+                [token_1.address, token_2.address, token_3.address],
                 employee_3.yearlyEURSalary,
                 { from: owner }
             )
             event = transaction.logs.find(e => e.event === "LogEmployeeAdded")
             employee_3.id = event.args.employeeId
+            employee_3.allowedTokens = [token_1.address, token_2.address, token_3.address]
 
             employeesAdded += 2;
         })
@@ -233,7 +248,7 @@ contract("PayrollManager", async accounts => {
 
     context('Retrieve number of active owners', () => {
         
-        it("should only allow calculate burn rate by the owner", async () => {
+        it("should only allow retrieve employees count by the owner", async () => {
             await payroll.getEmployeeCount({
                 from: employee_1.account 
             }).should.be.rejectedWith("VM Exception")
