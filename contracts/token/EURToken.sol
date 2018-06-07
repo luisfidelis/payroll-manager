@@ -9,8 +9,8 @@ contract EURToken is StandardToken {
     uint public decimals = 18;
     uint public INITIAL_SUPPLY = 1000000000 * (10**decimals);
 
-    function EURToken() public {
-        totalSupply = INITIAL_SUPPLY;
+    constructor() public {
+        totalSupply_ = INITIAL_SUPPLY;
         balances[msg.sender] = INITIAL_SUPPLY;
     }
 } 

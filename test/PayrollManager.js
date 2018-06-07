@@ -1,6 +1,5 @@
 
 const BigNumber = web3.BigNumber
-const signer = require("eth-signer")
 const should = require("chai")
     .use(require("chai-as-promised"))
     .should()
@@ -14,6 +13,7 @@ const EURToken = artifacts.require("./token/EURToken.sol")
 // Contracts
 let payroll = null
 let eurToken = null
+let oracle = null
 
 // Agents
 let owner = null
@@ -71,8 +71,8 @@ contract("PayrollManager", async accounts => {
                 "initialYearlyEURSalary"
             ])
             assert.equal(args.accountAddress, employee_1.account, "Employee's account must be registered")
-            assert.equal(args.employeeId, BigNumber(1), "The employee must be the first employee" )
-            assert.equal(args.initialYearlyEURSalary, employee_1.yearlyEURSalary, "The yearly salary must be the expected")
+            assert.equal(args.employeeId.toNumber(), 1, "The employee must be the first employee" )
+            assert.equal(args.initialYearlyEURSalary.toNumber(), employee_1.yearlyEURSalary.toNumber(), "The yearly salary must be the expected")
             employee_1.employeeId = args.employeeId
         })
 

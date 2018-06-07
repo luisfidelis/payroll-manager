@@ -2,7 +2,7 @@ pragma solidity ^0.4.24;
 
 import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
-import "openzeppelin-solidity/contracts/ERC20/StandardToken.sol";
+import "openzeppelin-solidity/contracts/token/ERC20/StandardToken.sol";
 
 /**
  * @title Payroll Manager 
@@ -25,18 +25,21 @@ contract PayrollManager is Ownable {
     address public eurToken;
     address public oracle;
 
+    //@todo Add an Oracle to deal with dates 
+    uint256 constant MONTH = 2592000;
+    
     /**
      * Types   
      */
-    Struct Employee {
+    struct Employee {
         address account;
         uint256 yearlyEURSalary;
         address[] allowedTokens;
-        address[] tokens;
-        uint256[] distribution;
+        bool active;
         uint256 paydayTimelock;
         uint256 allocationTimelock;
-        bool active;
+        address[] tokens;
+        uint256[] distribution;
     }
     
     /**
@@ -96,7 +99,16 @@ contract PayrollManager is Ownable {
     {   
         require(account != address(0), "The account is an invalid address");
         require(!isEmployee(account), "The account is already an employee");
-        Employee employee = Employee(account, initialYearlyEURSalary, allowedTokens, now.add(30 days),,,true);
+        Employee memory employee = Employee({
+            account: account,
+            yearlyEURSalary: initialYearlyEURSalary,
+            allowedTokens: allowedTokens,
+            active: true,
+            paydayTimelock: now.add(MONTH),
+            allocationTimelock: 0,
+            tokens : new address[](0),
+            distribution: new uint256[](0)
+        });
         totalEmployees = totalEmployees.add(1);
         employees[totalEmployees] = employee;
         accounts[account] = totalEmployees;
@@ -160,7 +172,7 @@ contract PayrollManager is Ownable {
         public
         returns (address, uint256, address[])
     {
-        Employee employee = employees[employeeId];
+        Employee memory employee = employees[employeeId];
         return (employee.account, employee.yearlyEURSalary, employee.allowedTokens);
     } 
 
@@ -171,6 +183,7 @@ contract PayrollManager is Ownable {
     function calculatePayrollBurnrate() 
         onlyOwner
         view 
+        external
         returns (uint256 burnRate) 
     {
         for(uint index = 1; index <= totalEmployees; index++){
@@ -204,7 +217,7 @@ contract PayrollManager is Ownable {
         onlyEmployee
         external
     {
-        Employee employee = employees[accounts[msg.sender]];
+        Employee storage employee = employees[accounts[msg.sender]];
         require(now.sub(employee.allocationTimelock) >= 0, "The employee is time locked for allocations"); 
         require(tokens.length == distribution.length, "Token list length doesn't matches distribution length");
         uint256 totalDistribution;
@@ -215,7 +228,7 @@ contract PayrollManager is Ownable {
         require(totalDistribution <= 10000, "The distribution exceeds 100%");
         employee.tokens = tokens;
         employee.distribution = distribution;
-        employee.allocationTimelock = now.add((1 year).div(2));
+        employee.allocationTimelock = now.add(MONTH.mul(6));
         emit LogSalaryAllocationChanged(accounts[msg.sender], tokens, distribution);
     }
 
@@ -226,22 +239,24 @@ contract PayrollManager is Ownable {
         onlyEmployee
         external
     {
-        Employee employee = employees[accounts[msg.sender]];
+        Employee storage employee = employees[accounts[msg.sender]];
         require(now.sub(employee.paydayTimelock) >= 0, "The employee is time locked for withdrawal");
-        employee.paydayTimelock = now.add(30 days);
+        employee.paydayTimelock = now.add(MONTH);
         uint256 monthlySalary = employee.yearlyEURSalary.div(12); 
         uint256 distributed;
-        for(uint index = 0; index < employee.tokens; index++){
+        for(uint index = 0; index < employee.tokens.length; index++){
             if(employee.distribution[index] != 0){
                 address token = employee.tokens[index];
                 require(rates[token] != 0, "Missing token rate");
                 uint256 distribution = employee.distribution[index];
-                StandardToken(token).transfer(msg.sender, rates[token].mul(monthlySalary.mul(distribution).div(10000)));
+                StandardToken _token = StandardToken(token);
+                require(_token.transfer(msg.sender, rates[token].mul(monthlySalary.mul(distribution).div(10000))));
                 distributed.add(employee.distribution[index]);
             }
         }
         if(distributed < 10000){
-            StandardToken(eurToken).transfer(monthlySalary.mul((10000.sub(distributed)).div(10000));
+            StandardToken _eur = StandardToken(eurToken);
+            require(_eur.transfer(msg.sender, monthlySalary.mul((uint256(10000).sub(distributed)).div(10000))));
         }
         emit LogSalaryWithdrawal(accounts[msg.sender], now);
     }
@@ -256,7 +271,7 @@ contract PayrollManager is Ownable {
     {
         require(account != address(0), "The account is an invalid address");
         require(!isEmployee(account), "The account is already an employee");
-        Employee employee = employees[accounts[msg.sender]];
+        Employee storage employee = employees[accounts[msg.sender]];
         employee.account = account;
         accounts[account] = accounts[msg.sender];
         delete accounts[msg.sender];
@@ -273,19 +288,18 @@ contract PayrollManager is Ownable {
     {
         require(msg.sender == oracle, "The wallet isn't the oracle");
         rates[token] = EURExchangeRate;
-        emit LogAccountChanged(accounts[account], account);
     }
 
     /**
      * @dev Checks if an address matches an active employee
-     * @param employeeId  Employee identifier/index 
+     * @param account Employee account 
      */ 
-    function isEmployee(address employeeAccount) 
+    function isEmployee(address account) 
         view 
         internal
         returns(bool) 
     {
-        return employees[accounts[employeeAccount]].active;
+        return employees[accounts[account]].active;
     }
 
     
@@ -300,7 +314,7 @@ contract PayrollManager is Ownable {
         internal
         returns(bool) 
     {
-        for(uint index = 0; index < allowedTokens; index++) {
+        for(uint index = 0; index < allowedTokens.length; index++) {
             if(allowedTokens[index] == token){
                 return true;
             }
