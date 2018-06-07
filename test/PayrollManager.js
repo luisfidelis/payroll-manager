@@ -231,6 +231,21 @@ contract("PayrollManager", async accounts => {
 
     })
 
+    context('Retrieve number of active owners', () => {
+        
+        it("should only allow calculate burn rate by the owner", async () => {
+            await payroll.getEmployeeCount({
+                from: employee_1.account 
+            }).should.be.rejectedWith("VM Exception")
+        })
+
+        it("should retrieve the number of active employees", async () => {
+            const count = await payroll.getEmployeeCount({ from: owner })
+            assert.equal(count.toNumber(), 3, "The number of active employees must be correct") 
+        })
+
+    })
+
 
 
 })
