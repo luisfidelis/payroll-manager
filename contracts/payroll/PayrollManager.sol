@@ -39,7 +39,7 @@ contract PayrollManager is Ownable {
         uint256 yearlyEURSalary;
         address[] allowedTokens;
         bool active;
-        uint256 paydayTimelock;
+        uint256 lastPayday;
         uint256 allocationTimelock;
         address[] tokens;
         uint256[] distribution;
@@ -116,7 +116,7 @@ contract PayrollManager is Ownable {
             yearlyEURSalary: initialYearlyEURSalary,
             allowedTokens: allowedTokens,
             active: true,
-            paydayTimelock: now.add(MONTH),
+            lastPayday: now, // employee can withdraw its salary after 1 MONTH
             allocationTimelock: 0,
             tokens : new address[](0),
             distribution: new uint256[](0)
@@ -153,6 +153,8 @@ contract PayrollManager is Ownable {
         external
     {   
         address account = employees[employeeId].account;
+        uint256 salaryTimes = now.sub(employees[employeeId].lastPayday).div(MONTH);
+        if(salaryTimes > 0) payEmployee(employees[employeeId], salaryTimes);
         delete accounts[account];
         delete employees[employeeId];
         emit LogEmployeeRemoved(employeeId);
@@ -185,10 +187,10 @@ contract PayrollManager is Ownable {
         onlyActiveEmployee(employeeId)
         view 
         public
-        returns (address account, uint256 yearlyEURSalary, address[] allowedTokens, uint256 paydayTimelock, uint256 allocationTimelock, address[] tokens, uint256[] distribution)
+        returns (address account, uint256 yearlyEURSalary, address[] allowedTokens, uint256 lastPayday, uint256 allocationTimelock, address[] tokens, uint256[] distribution)
     {
         Employee memory employee = employees[employeeId];
-        return (employee.account, employee.yearlyEURSalary, employee.allowedTokens, employee.paydayTimelock, employee.allocationTimelock, employee.tokens, employee.distribution);
+        return (employee.account, employee.yearlyEURSalary, employee.allowedTokens, employee.lastPayday, employee.allocationTimelock, employee.tokens, employee.distribution);
     } 
 
     /**
@@ -278,26 +280,11 @@ contract PayrollManager is Ownable {
         external
     {
         Employee storage employee = employees[accounts[msg.sender]];
-        require(now.sub(employee.paydayTimelock) >= 0, "The employee is time locked for withdrawal");
-        employee.paydayTimelock = now.add(MONTH);
+        uint256 salaryTimes = now.sub(employee.lastPayday).div(MONTH);
+        require(salaryTimes > 0, "The employee is time locked for withdrawal");
         // inactive employee if the contract is dead
         if(!live) employee.active = false;
-        uint256 monthlySalary = employee.yearlyEURSalary.div(12); 
-        uint256 distributed;
-        for(uint256 index = 0; index < employee.tokens.length; index++){
-            if(employee.distribution[index] != 0){
-                address token = employee.tokens[index];
-                require(rates[token] != 0, "Missing token rate");
-                uint256 distribution = employee.distribution[index];
-                Token _token = Token(token);
-                require(_token.transfer(msg.sender, calculateTokenAmount(distribution, monthlySalary, _token.decimals(), rates[token])));
-                distributed = distributed.add(employee.distribution[index]);
-            }
-        }
-        if(distributed < 10000){
-            StandardToken _eur = StandardToken(eurToken);
-            require(_eur.transfer(msg.sender, (monthlySalary.mul(uint256(10000).sub(distributed)).div(10000))));
-        }
+        payEmployee(employee, salaryTimes);
         emit LogSalaryWithdrawal(accounts[msg.sender], now);
     }
 
@@ -312,6 +299,32 @@ contract PayrollManager is Ownable {
     {
         require(msg.sender == oracle, "The wallet isn't the oracle");
         rates[token] = EURExchangeRate;
+    }
+
+    /**
+     * @dev Pay employee's salary
+     * @param employee      Employee instance 
+     * @param times         Number of salaries
+     */ 
+    function payEmployee(Employee storage employee, uint256 times)
+        internal
+    {
+        employee.lastPayday = now;
+        uint256 monthlySalary = employee.yearlyEURSalary.div(12); 
+        uint256 distributed;
+        for(uint256 index = 0; index < employee.tokens.length; index++){
+            if(employee.distribution[index] != 0){
+                address token = employee.tokens[index];
+                require(rates[token] != 0, "Missing token rate");
+                Token _token = Token(token);
+                require(_token.transfer(employee.account, calculateTokenAmount(employee.distribution[index], monthlySalary, times, _token.decimals(), rates[token])));
+                distributed = distributed.add(employee.distribution[index]);
+            }
+        }
+        if(distributed < 10000){
+            StandardToken _eur = StandardToken(eurToken);
+            require(_eur.transfer(employee.account, times.mul(monthlySalary.mul(uint256(10000).sub(distributed)).div(10000)) ));
+        }
     }
 
     /**
@@ -344,17 +357,18 @@ contract PayrollManager is Ownable {
      * @dev Calculates monthly Token amount
      * @param distribution  Percentage of salary in token 
      * @param monthlySalary Monthly salary in EUR
+     * @param times         Number of salaries
      * @param tokenDecimals Token decimal places
      * @param rate          Token/EUR exchange rate 
      * @return Token amount
      */ 
-    function calculateTokenAmount(uint256 distribution, uint256 monthlySalary, uint256 tokenDecimals, uint256 rate)
+    function calculateTokenAmount(uint256 distribution, uint256 monthlySalary, uint256 times, uint256 tokenDecimals, uint256 rate)
         pure
         internal
         returns(uint256 amount)
     {   
         uint256 decimalsCast = 10 ** tokenDecimals;
-        amount = (monthlySalary.mul(distribution).div(10000)).mul(decimalsCast).div(rate);
+        amount = times.mul((monthlySalary.mul(distribution).div(10000)).mul(decimalsCast).div(rate));
     }
     
     /**
