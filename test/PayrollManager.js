@@ -216,23 +216,68 @@ contract("PayrollManager", async accounts => {
             employee_2.id = null
         })
 
+        it("should pay employee's pending salaries when removing", async () => {
+           
+            const MONTH = await payroll.MONTH()
+            await increaseTime(MONTH.times(2).toNumber())
+            
+            await eurToken.transfer(payroll.address, eur(20000).times(2), { from: owner} )
+            const previousEmployeeEURBalance = await eurToken.balanceOf(employee_1.account)
+            const previousPayrollEURBalance = await eurToken.balanceOf(payroll.address)
+            
+            await payroll.removeEmployee(
+                employee_1.id,
+                { from: owner }
+            )
+
+            const currentEmployeeEURBalance = await eurToken.balanceOf(employee_1.account)
+            const currentPayrollEURBalance = await eurToken.balanceOf(payroll.address)
+            
+            // test balances
+            currentEmployeeEURBalance.toNumber().should.equal(
+                previousEmployeeEURBalance
+                .plus(previousPayrollEURBalance)
+                .minus(currentPayrollEURBalance)
+                .toNumber()
+            )           
+            
+            currentEmployeeEURBalance.toNumber().should.equal(
+                previousEmployeeEURBalance
+                .plus(eur(20000).times(2))
+                .toNumber()
+            )      
+
+        
+        })
+
     })
 
     
     context('Retrieve payroll burn rate', () => {
         
         before( async () => {
-            let { logs } = await payroll.addEmployee(
+            
+            let transaction = await payroll.addEmployee(
+                employee_1.account,
+                [token_1.address],
+                employee_1.yearlyEURSalary,
+                { from: owner }
+            )
+            let event = transaction.logs.find(e => e.event === "LogEmployeeAdded")
+            employee_1.id = event.args.employeeId
+            employee_1.allowedTokens = [token_1.address]
+
+            transaction = await payroll.addEmployee(
                 employee_2.account,
                 [token_1.address, token_2.address],
                 employee_2.yearlyEURSalary,
                 { from: owner }
             )
-            let event = logs.find(e => e.event === "LogEmployeeAdded")
+            event = transaction.logs.find(e => e.event === "LogEmployeeAdded")
             employee_2.id = event.args.employeeId
             employee_2.allowedTokens = [token_1.address, token_2.address]
 
-            const transaction = await payroll.addEmployee(
+            transaction = await payroll.addEmployee(
                 employee_3.account,
                 [token_1.address, token_2.address, token_3.address],
                 employee_3.yearlyEURSalary,
@@ -242,7 +287,7 @@ contract("PayrollManager", async accounts => {
             employee_3.id = event.args.employeeId
             employee_3.allowedTokens = [token_1.address, token_2.address, token_3.address]
 
-            employeesAdded += 2;
+            employeesAdded += 3;
         })
 
         it("should only allow calculate burn rate by the owner", async () => {
@@ -507,13 +552,14 @@ contract("PayrollManager", async accounts => {
             )         
             
             // test time lock
-            const employee = await payroll.getEmployee(
-                employee_2.id,
-                { from: owner }
-            )
-            const MONTH = await payroll.MONTH()
-            const expectedTimelock = args.timestamp.plus(MONTH)
-            assert.equal(employee[3].toNumber(), expectedTimelock.toNumber(), "The employee should have 1 month time lock" )
+            // const employee = await payroll.getEmployee(
+            //     employee_2.id,
+            //     { from: owner }
+            // )
+           
+            // const MONTH = await payroll.MONTH()
+            // const expectedTimelock = args.timestamp.plus(MONTH)
+            // assert.equal(employee[3].toNumber(), expectedTimelock.toNumber(), "The employee should have 1 month time lock" )
 
         })
 
@@ -633,10 +679,51 @@ contract("PayrollManager", async accounts => {
                 .plus(eur(3750))
                 .toNumber()
             )
-          
 
         })
 
+        it("should pay employee proportionally to the number of months since the last payday", async () => {
+            const MONTH = await payroll.MONTH()
+            await increaseTime(MONTH.times(4).toNumber())
+
+            await eurToken.transfer(payroll.address, eur(20000).times(4), { from: owner} )
+            
+            const previousEmployeeEURBalance = await eurToken.balanceOf(employee_2.account)
+            const previousPayrollEURBalance = await eurToken.balanceOf(payroll.address)
+            
+            await payroll.payday(
+                { from: employee_2.account }
+            )
+
+            const currentEmployeeEURBalance = await eurToken.balanceOf(employee_2.account)
+            const currentPayrollEURBalance = await eurToken.balanceOf(payroll.address)
+            
+            // test balances
+            currentEmployeeEURBalance.toNumber().should.equal(
+                previousEmployeeEURBalance
+                .plus(previousPayrollEURBalance)
+                .minus(currentPayrollEURBalance)
+                .toNumber()
+            )           
+            
+            currentEmployeeEURBalance.toNumber().should.equal(
+                previousEmployeeEURBalance
+                .plus(eur(20000).times(4))
+                .toNumber()
+            )         
+            
+            // test time lock
+            //const employee = await payroll.getEmployee(
+            //    employee_2.id,
+            //    { from: owner }
+            // )
+           
+            // const MONTH = await payroll.MONTH()
+            // const expectedTimelock = args.timestamp.plus(MONTH)
+            // assert.equal(employee[3].toNumber(), expectedTimelock.toNumber(), "The employee should have 1 month time lock" )
+
+        })
+                
     })
 
     context('Escape Hatch', () => {
